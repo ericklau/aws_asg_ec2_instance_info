@@ -1,0 +1,170 @@
+---
+- name: Use of variable
+  debug:
+    msg: "{{ inventory_hostname_short }}0{{ item }}"
+  with_sequence: start=0 end="{{ desired_capacity }}"
+  register: ec2_sequence
+
+- name: Gather information about any instance with a tag key Name and value Example
+  community.aws.ec2_instance_info:
+    region: "{{ region }}"
+    filters:
+      "tag:Name": "{{ inventory_hostname_short }}*"
+      "tag:Env": "{{ env }}*"
+      "tag:App": "{{ project_name }}*"
+      instance-state-name: [ "running", "pending", "stopped" ]
+  register: ec2
+
+- name: Gather information about any instance with a tag key Name and value Example
+  community.aws.ec2_instance_info:
+    region: "{{ region }}"
+    filters:
+      "tag:Env": "{{ env }}*"
+      "tag:App": "{{ project_name }}*"
+      instance-state-name: [ "running", "pending", "stopped" ]
+  register: ec2_diff
+
+- name: Sort EC2 names
+  set_fact:
+    ec2_current:  "{{ ec2 | json_query('instances[*].tags.Name')}}"
+
+- name: Manipulate data
+  set_fact:
+    ec2_sequence:  "{{ ec2_sequence | json_query('results[*].msg')}}"
+
+- name: Manipulate data for the diff
+  set_fact:
+    ec2_diff_instance_ids:  "{{ ec2_diff | json_query('instances[*].instance_id')}}"
+
+- name: Manipulate data for the current
+  set_fact:
+    ec2_current_instance_ids:  "{{ ec2 | json_query('instances[*].instance_id')}}"
+
+- set_fact:
+    ansible_name_difference: "{{ (ec2_sequence | difference(ec2_current)) }}"
+
+- set_fact:
+    instance_diff: "{{ (ec2_diff_instance_ids | difference(ec2_current_instance_ids)) }}"
+
+- name: Just the Names
+  debug: var="ec2_current"
+
+- name: Just the Names
+  debug: var="ec2_sequence"
+
+- name: Just the Difference
+  debug: var="instance_diff"
+
+- name: Gather information about any instance with a tag key Name and value Example
+  amazon.aws.ec2_tag:
+    region: "{{ region }}"
+    resource: "{{ item.0 }}"
+    tags:
+        Name: "{{ item.1 }}"
+        Env: "{{ env }}-{{ item.1 }}"
+        App: "{{ project_name }}"
+  loop: "{{ instance_diff | zip(ansible_name_difference) | list }}"
+
+# - name: Ensure all EC2s are tagged
+#   amazon.aws.ec2_tag:
+#     region:  us-east-1
+#     resource: '{{ item.instance_id }}'
+#     state: present
+#     tags:
+#       App: vp2nhbwebntn{{ ansible_loop.index }}
+#   with_items: '{{ ec2.instances }}'
+#   loop_control:
+#     extended: yes
+#   # when: ec2.changed
+#   changed_when: false
+
+
+# - name: Get volumes ids
+#   ec2_vol:
+#     region: us-east-1
+#     instance: "{{ item.instance_id }}"
+#     state: list
+#   register: ec2_instances_volumes
+#   loop: "{{ ec2.instances}}"
+#
+# - name: Tag volumes
+#   ec2_tag:
+#       region: us-east-1
+#       resource: "{{ item.1.id }}"
+#       tags: '{"Name":"Volume"}'
+#   with_subelements:
+#       - "{{ ec2_instances_volumes.results }}"
+#       - volumes
+#
+# - name: Display ec2
+#   debug:
+#     msg: "{{ item }}"
+#   with_items: "{{ ec2 }}"
+#
+# - name: Display all variables/facts known for a host
+#   debug:
+#     msg: "This is a debug message: {{ item.private_ip_address }}"
+#   with_items: "{{ ec2.instances }}"
+#
+# - name: set facts
+#   set_fact:
+#     ec2_private_ips: "{{ item.private_ip_address }}"
+#   with_items: "{{ ec2.instances }}"
+#
+# - name: Add EC2 instances to host group {{ ec2_private_ips }}
+#   add_host:
+#     hostname: "{{ item.private_ip_address }}"
+#     groupname: sampleec2s
+# #  with_items: "{{ ec2.instances }}"
+#   loop: "{{ ec2.instances }}"
+#
+# - name: Return instance ids
+#   set_stats:
+#     data:
+#       JENKINS_EXPORT:
+#         - hostname: "{{ item.private_ip_address }}"
+#         - ami_image_id: "{{ item.image_id }}"
+#         - instance_id: "{{ item.instance_id }}"
+#         - instance_type: "{{ item.instance_type }}"
+#         - launch_time: "{{ item.launch_time }}"
+#         - security_groups: "{{ item.security_groups }}"
+#         - state: "{{ item.state }}"
+#         - subnet_id: "{{ item.subnet_id }}"
+#         - vpc_id: "{{ item.vpc_id }}"
+#         - tags: "{{ item.tags }}"
+#     aggregate: yes
+#     per_host: no
+#   with_items: "{{ ec2.instances }}"
+#   register: ec2_private_ip
+#
+# - local_action:
+#     module: copy
+#     content: "{{ ec2 | to_nice_json }}"
+#     dest: /Users/ericksonlau/Desktop/Ansible/ec2_facts.json
+#
+# - name: Just the Names
+#   debug: msg="{{ ec2 | json_query('instances[*].tags.Name')}}"
+#
+# - name: Here you go message
+#   debug:
+#     msg: "Succssfully terminated instance id: {{ item.instance_id }} with private ip: {{ item.private_ip_address }} at {{ ansible_date_time.iso8601 }} with {{ item | json_query([*].tags) }}"
+#   with_items: '{{ ec2.instances }}'
+#
+# #- name: terminate instances
+# # amazon.aws.ec2:
+# #    state: 'absent'
+# #    instance_ids: '{{ item.instance_id }}'
+# #    region: us-east-1
+# #  with_items: '{{ ec2.instances }}'
+# #  when: ec2.instances is defined
+#
+# - name: Use of variable
+#   debug:
+#     msg: "{{ item }}"
+#   with_sequence: start=1 end="{{ end_at }}"
+#   vars:
+#     - end_at: 10
+#
+# # - name: Here you go
+# #   debug:
+# #     var: "{{ ec2.instances.tags }}"
